@@ -100,7 +100,7 @@ const SimpleTextMessage: React.FC<ThreadMessage> = (props) => {
     }
   )
 
-  marked.use(markedKatex({ throwOnError: false }))
+  marked.use(markedKatex({ throwOnError: false } as any))
 
   const { onViewFile, onViewFileContainer } = usePath()
   const parsedText = marked.parse(text)
