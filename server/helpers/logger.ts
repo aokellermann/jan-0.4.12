@@ -11,6 +11,7 @@ export class Logger implements FastifyBaseLogger {
     return new Logger()
   }
   level = 'info'
+  msgPrefix = undefined
 
   silent = () => {}
 
