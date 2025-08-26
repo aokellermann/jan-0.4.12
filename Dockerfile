@@ -4,7 +4,10 @@ FROM node:20-bookworm AS base
 FROM base AS builder
 
 # Install g++ 11
-RUN apt update && apt install -y gcc-11 g++-11 cpp-11 jq xsel && rm -rf /var/lib/apt/lists/*
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+  --mount=type=cache,target=/var/lib/apt,sharing=locked \
+  apt update && apt-get --no-install-recommends install -y \
+  gcc-11 g++-11 cpp-11 jq xsel
 
 WORKDIR /app
 
@@ -13,13 +16,17 @@ COPY . ./
 
 RUN export NITRO_VERSION=$(cat extensions/inference-nitro-extension/bin/version.txt) && \
     jq --arg nitroVersion $NITRO_VERSION '(.scripts."downloadnitro:linux" | gsub("\\${NITRO_VERSION}"; $nitroVersion)) | gsub("\r"; "")' extensions/inference-nitro-extension/package.json > /tmp/newcommand.txt && export NEW_COMMAND=$(sed 's/^"//;s/"$//' /tmp/newcommand.txt) && jq --arg newCommand "$NEW_COMMAND" '.scripts."downloadnitro:linux" = $newCommand' extensions/inference-nitro-extension/package.json > /tmp/package.json && mv /tmp/package.json extensions/inference-nitro-extension/package.json
-RUN make install-and-build
+
+ENV YARN_CACHE_FOLDER=/root/.yarn
+RUN --mount=type=cache,target=/root/.yarn make install-and-build
 
 # # 2. Rebuild the source code only when needed
 FROM base AS runner
 
+ENV YARN_CACHE_FOLDER=/root/.yarn
+
 # Install g++ 11
-RUN apt update && apt install -y gcc-11 g++-11 cpp-11 jq xsel && rm -rf /var/lib/apt/lists/*
+# RUN apt update && apt install -y gcc-11 g++-11 cpp-11 jq xsel && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -31,8 +38,8 @@ COPY --from=builder /app/yarn.lock ./yarn.lock
 # Copy the package.json, yarn.lock, and build output of server yarn space to leverage Docker cache
 COPY --from=builder /app/core ./core/
 COPY --from=builder /app/server ./server/
-RUN cd core && yarn install && yarn run build
-RUN yarn workspace @janhq/server install && yarn workspace @janhq/server build
+RUN --mount=type=cache,target=/root/.yarn cd core && yarn install && yarn run build
+RUN --mount=type=cache,target=/root/.yarn yarn workspace @janhq/server install && yarn workspace @janhq/server build
 COPY --from=builder /app/docs/openapi ./docs/openapi/
 
 # Copy pre-install dependencies
@@ -42,8 +49,8 @@ COPY --from=builder /app/pre-install ./pre-install/
 COPY --from=builder /app/uikit ./uikit/
 COPY --from=builder /app/web ./web/
 
-RUN yarn workspace @janhq/uikit install && yarn workspace @janhq/uikit build
-RUN yarn workspace @janhq/web install
+RUN --mount=type=cache,target=/root/.yarn yarn workspace @janhq/uikit install && yarn workspace @janhq/uikit build
+RUN --mount=type=cache,target=/root/.yarn yarn workspace @janhq/web install
 
 RUN npm install -g serve@latest
 
